@@ -1,0 +1,407 @@
+{% extends "layout.html" %} 
+{% import "bootstrap/wtf.html" as wtf %} 
+{% import "library.html" as library %}
+
+{% block title %}
+{{ super()}}
+Captures - {{ traceFile.name }}
+{% endblock %} 
+
+{% block content %}
+{{ super() }}
+
+
+<div class="container-fluid content">
+	
+	<div class="col-md-12">
+		{% for category, message in get_flashed_messages(with_categories=true) %} 
+		<div class="alert alert-{{ category }}">
+			<button type="button" class="close" data-dismiss="alert">&times;</button>
+			{{ message }}
+		</div>
+		{% endfor %}
+		<br/>
+
+		<div class="row">
+			<div id="custom-toolbar">
+		    	<div class="row">
+			    	 <div class="col-md-4">
+			    	  	<span class="filename">
+							<span>{{ traceFile.name }}</span>.{{ traceFile.filetype }}
+							<a id="editName"><i class="fa fa-pencil-square-o"></i></a>
+						</span>
+						<span class="editname hide">
+							<input class="form filename "/>.{{ traceFile.filetype }}
+							<a id="saveName"><i class="fa fa-floppy-o"> </i></a>
+						</span>
+					</div>
+
+					<div class="col-md-2 captureButtons">
+						
+						<a href="#" id="packetStats" data-toggle="modal", data-target="#packetStatsModal"> 
+							<i class="fa fa-bar-chart fa-2x"></i> 
+						</a>
+						<a href="#" id="tags" data-toggle="modal", data-target="#tagsModal"> 
+							<i class="fa fa-tags fa-2x"></i> 
+						</a>
+						<a href="{{ url_for('download_file', file_id=traceFile.id, attachment_name='%s.%s' % (traceFile.name, traceFile.filetype)) }}">
+							<i class="fa fa-download fa-2x"></i>
+						</a>
+						<a href="#" data-toggle="modal", data-target="#sanitizeModal"> 
+							<i class="fa fa-medkit fa-2x"></i> 
+						</a>
+					</div>
+
+					<div class="col-md-6">
+			    	  <a href="#" id="clear-filter"><i  class="fa fa-ban text-danger pull-right"></i></a>
+			    	  <div class="filter-wrapper pull-right">
+			    		  <i class="fa fa-filter"></i>
+			    		  <input id="display-filter" class="form" placeholder="Display Filter"></input>
+			    	  </div>
+			    	  <small class="text-center text-muted pull-right">({{ display_count }} packets displayed) </small>
+				   	</div>
+		    	</div>
+			</div>
+			<div class="panel panel-default packets">
+			  
+			  <div class="panel-body splitter">
+		{% if details %}
+
+				<div class="packetList">
+					<table class="table table-condensed table-hover" data-toolbar="#custom-toolbar" data-height="404.5" data-toggle="table" data-show-columns="true">
+					  	<thead>
+					  		<tr>
+						  		<th data-field="Number">#</th>
+							  	<th data-width="100" data-field="Time">Time</th>
+							  	<th data-width="100" data-field="Delta">Delta</th>
+							  	<th data-width="150" data-field="Source">Source</th> <!-- <small class="pull-right text-muted">(port)</small> -->
+							  	<th data-width="150" data-field="Destination">Destination</th>
+							  	<th data-field="Protocol">Protocol</th>
+							  	<th>Length</th>
+							  	<th data-field="Info">Info</th>
+					  		</tr>
+					  	</thead>
+
+					  	<tbody>
+				  		{% for packet in details['packets'] %}
+					  		{% if packet.protocol == 'HTTP' %}<tr class="success">
+					  		{% elif packet.protocol == 'TCP' %}<tr class="info">
+					  		{% elif packet.protocol == 'UDP' %}<tr class="warning">
+					  		{% else %}<tr>
+					  		{% endif %}
+				  				<td class="number">{{ packet.number }}</td>
+				  				<td>{{ packet.time }}</td>
+				  				<td>{{ packet.delta }}</td>
+				  			  	<td>{{ packet.src_ip}} </td>
+				  			  	<td>{{ packet.dst_ip }} </td> <!-- <small class="pull-right text-muted">({{ packet.dst_port }}) </small> -->
+				  			  	<td>{{ packet.protocol }} 
+				  			  		{% if packet.stream %}<a class="filter-stream pull-right" data-filter="tcp.stream == {{ packet.stream }}" title="Follow Stream ({{ packet.stream }})"><i class="fa fa-space-shuttle"></i></a>{% endif %}
+				  			  	</td>
+				  			  	<td>{{ packet.length }}</td>
+				  			  	<td style="max-width: 200px;white-space:nowrap; overflow: hidden;">{{ packet.desc }}</td>
+					  		</tr>
+				  		{% endfor %}
+				  		</tbody>
+				  	</table>
+				</div>
+			  	<div class="packetView">
+			  		<div class="spinner text-center hide"><i class="fa fa-spinner fa-spin fa-2x"></i></div>
+			  		<div class="packetPane">
+			  		</div>
+			  	</div>	
+		  	</div>	
+		</div>
+		
+
+
+			<!-- Packet Stats Modal -->
+			<div class="modal fade" id="packetStatsModal">
+			  <div class="modal-dialog modal-lg">
+			    <div class="modal-content">
+			      <div class="modal-header">
+			        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+			        <h4 class="modal-title">Packet Stats</h4>
+			      </div>
+			      <div class="modal-body">
+			      	<div class="col-md-4">
+			      		{% column_chart details['stats']['breakdown'] with library=library.col_library %}
+			      	</div>
+			      	<div class="col-md-4">
+			      		{% pie_chart details['stats']['length_buckets'] with library=library.pie_library %}
+			      	</div>
+			      	<div class="col-md-4">
+			      		<h4 class="chart-title text-center">Capture File Stats</h4>
+			      		</br>
+			      		<div style="min-height: 150px;">
+			      			<dl class="dl-horizontal">
+			      			  <dt>Packet Count</dt>
+			      			  <dd>{{ traceFile.packet_count }}</dd>
+			      			  <dt>File Size</dt>
+			      			  <dd>{{ traceFile.filesize|format_comma }} Bytes</dd>
+			      			  <dt>Average Packet Length</dt>
+			      			  <dd>{{ details['stats']['avg_length'] }} Bytes</dd>
+			      			  <dt>Date Added</dt>
+			      			  <dd>{{ traceFile.date_added.strftime('%b %d, %Y %I:%M%p') }}</dd>
+			      			</dl>
+			      		</div>
+			      	</div>
+
+			      </div>
+			      <div class="modal-footer">
+			      </div>
+			        </form>
+			    </div><!-- /.modal-content -->
+			  </div><!-- /.modal-dialog -->
+			</div><!-- /.modal -->
+
+		{% else %}
+			</div>
+		</div>
+		{% endif %}
+		<!-- Tags Modal -->
+		<div class="modal fade" id="tagsModal">
+		  <div class="modal-dialog">
+		    <div class="modal-content">
+		      <div class="modal-header">
+		        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+		        <h4 class="modal-title">Tags</h4>
+		      </div>
+		      <div class="modal-body">
+		      	
+		      {{ wtf.form_field(tagsForm.tags, class="", **{'data-role':'tagsinput', 'data-provide':'typeahead'}) }}
+		      </div>
+		    </div><!-- /.modal-content -->
+		  </div><!-- /.modal-dialog -->
+		</div><!-- /.modal -->
+
+		<div class="modal fade" id="sanitizeModal">
+		  <div class="modal-dialog">
+		    <div class="modal-content">
+		      <div class="modal-header">
+		        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+		        <h4 class="modal-title">Sanitize {{ traceFile.name }}.{{ traceFile.filetype }}</h4>
+		      </div>
+		      <div class="modal-body">
+		        <form class="form" method="post" role="form">
+		          {{ wtf.form_errors(sanitizeForm, hiddens="only") }}
+		          <div class="row">
+		          	<div class="col-md-12">
+			          {{ wtf.form_field(sanitizeForm.sequential) }}
+		          	</div>
+		          </div>
+		          <div class="row">
+		          	<div class="col-md-3">
+			          {{ wtf.form_field(sanitizeForm.ipv4_mask, **{'data-toggle':'tooltip', 'title':'Mask IPv4 address sanitation (Eg. 8 preserves first octet).', 'placeholder': '0-24'}) }}
+		          	</div>
+		          	<div class="col-md-9">
+			          {{ wtf.form_field(sanitizeForm.start_ipv4, **{'data-toggle':'tooltip', 'title':'Start sequential sanitition with this IPv4 address.', 'placeholder': '10.0.0.1'}) }}
+		          	</div>
+		          </div>
+		          <div class="row">
+		          	<div class="col-md-3">
+				          {{ wtf.form_field(sanitizeForm.ipv6_mask, **{'data-toggle':'tooltip', 'title':'Mask IPv6 address sanitation (Eg. 16 preserves first chazwazza).', 'placeholder': '0-64'}) }}
+		          	</div>
+		          	<div class="col-md-9">
+				          {{ wtf.form_field(sanitizeForm.start_ipv6, **{'data-toggle':'tooltip', 'title':'Start sequential sanitation with this IPv6 address.', 'placeholder': '2001:aa::1'}) }}
+		          	</div>
+		          </div>
+		          <div class="row">
+		          	<div class="col-md-3">
+				          {{ wtf.form_field(sanitizeForm.mac_mask, **{'data-toggle':'tooltip', 'title':'Mask MAC address sanitaztion (Eg. 24 preserves manufacturer).', 'placeholder': '0-24'}) }}
+		          	</div>
+		          	<div class="col-md-9">
+			          {{ wtf.form_field(sanitizeForm.start_mac, **{'data-toggle':'tooltip', 'title':'Start sequential sanitation with this MAC address.', 'placeholder': '00:aa:00:00:00:00'}) }}
+		          	</div>
+		          </div>
+		      </div>
+		      <div class="modal-footer">
+		        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+		        <button id="sanitizeSubmit" type="button" class="btn btn-primary">Sanitize</button>
+		      </div>
+		        </form>
+		    </div><!-- /.modal-content -->
+		  </div><!-- /.modal-dialog -->
+		</div><!-- /.modal -->
+	</div>
+</div>
+
+
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+
+<script src="{{ url_for('static', filename='bootstrap-tagsinput.min.js') }}"></script>
+<script src="{{ url_for('static', filename='bootstrap3-typeahead.min.js') }}"></script>
+<script src="{{ url_for('static', filename='jquery.splitter-0.14.0.js') }}"></script>
+
+<script type="text/javascript">
+
+	var tag_list = [{% for tag in tags%} "{{tag}}",{% endfor %}];
+
+	$(document).ready(function(){
+
+		$('a#packetStats').on('click', function(e){
+			e.preventDefault();
+			$('div.packetStats').toggleClass('hide');
+		});
+
+		$('.bootstrap-tagsinput').prepend('<i class="fa fa-tags"></i>');
+
+		$('.splitter').css({height: '100%', width: '100%'}).split({
+		    orientation: 'horizontal',
+		    limit: 2,
+		    position: '50%'
+		});
+
+		$('input#tags').on('itemAdded itemRemoved', function(event) {
+	   		event.preventDefault();
+	   		var data = $('input#tags').val();
+
+	   		$.ajax({
+	   			type : "POST",
+	   			url : "/savetags/{{ traceFile.id }}",
+	   			data : data,
+	   			dataType : "json",
+	   			contentType: 'application/json;charset=UTF-8'
+	   		});
+
+	   	});
+
+	   	$('a#editName').on('click', function(event) {
+	   		event.preventDefault();
+
+	   		$('span.editname').removeClass('hide');
+	   		$('span.filename').addClass('hide');
+	   		$('input.filename').val("{{ traceFile.name }}");
+	   		$('input.filename').focus();
+
+	   	});
+
+	   	$('a#saveName').on('click', function(event){
+	   		event.preventDefault();
+	   		data = $('input.filename').val();
+
+	   		$.ajax({
+	   			type : "POST",
+	   			url : "/savename/{{ traceFile.id }}",
+	   			data : data,
+	   			dataType : "json",
+	   			contentType: 'application/json;charset=UTF-8',
+
+	   		});
+
+	   		$('span.editname').addClass('hide');
+	   		$('span.filename').removeClass('hide');
+	   		$('span.filename span').text(data);
+	   	});
+	   	
+	   $('input.filename').keyup(function(e){
+	   		event.preventDefault();
+	   		
+	   		if (e.keyCode == 13) {
+	   			$('a#saveName').trigger('click');
+	   		}
+	   });
+
+	   $('tbody tr').on('click', function(e){
+	   		e.preventDefault();
+	   		var packetPane = $('.packetPane')
+	   		packetPane.html('');
+	   		$('.spinner').removeClass('hide');
+
+	   		var packetDetail = $.ajax({
+	   			type : "GET",
+	   			url : "/captures/{{ traceFile.id }}/packetDetail/" + $(this).children().first().text(),
+	   			contentType: 'application/text;charset=UTF-8',
+	   			success: function(text){
+			   		$('.spinner').addClass('hide');
+			   		packetPane.html(text);
+		   		   
+		   		   $('a.packetHeader').on('click', function(e){
+		   			   	// e.preventDefault();
+		   			   	var panel = $(this).data('target');
+		   			   	$(panel).toggleClass('collapse');
+		   			   	$(this).children('i').toggleClass('fa-rotate-90');
+
+		   		   });
+			   	}
+
+	   		});
+
+	   });
+
+	   $('a.filter-stream').on('click', function(e){
+	   		window.location.href= window.location.pathname + '?display_filter=' + $(this).data('filter');
+	   });
+
+	   function getDisplayFilter()
+	   {
+	       var qstrings = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+	       for (var i = 0; i < qstrings.length; i++) {
+	       	if (qstrings[i].indexOf('display_filter') >= 0){
+		       var filter = qstrings[i].replace('display_filter=', '');
+		       return filter;
+	       	}
+	       }
+	   }
+
+	   var display_filter = decodeURIComponent(getDisplayFilter());
+
+	   if (display_filter != 'undefined') {
+	   	  $('input#display-filter').val(display_filter);
+	   }
+
+
+	   $('input#display-filter').keyup(function(e){
+	   		event.preventDefault();
+	   		
+	   		if (e.keyCode == 13) {
+	   			window.location.href= window.location.pathname + '?display_filter=' + $('input#display-filter').val();
+	   		}
+	   });
+
+	   $('#clear-filter').on('click', function(e){
+	   		e.preventDefault();
+	   		window.location.href= window.location.pathname.split('?')[0];
+	   });
+
+	   $('button.dropdown-toggle').dropdown();
+			$(".bootstrap-tagsinput input").typeahead({ source:tag_list, confirmKeys: [13, 44] });
+
+			$('.fixed-table-container').css('height', $('.top_panel').height()-60);
+
+			$(document.body).on('mouseup', function(){
+				$('.fixed-table-container').css('height', $('.top_panel').height()-60);
+		});
+
+		$('#sanitizeSubmit').on('click', function(e) {
+	   		e.preventDefault();
+	   		var data = {'sequential': $('#sanitize-sequential').is(':checked'),
+   				'ipv4_mask': $('#sanitize-ipv4_mask').val(),
+   				'start_ipv4': $('#sanitize-start_ipv4').val(),
+   				'ipv6_mask': $('#sanitize-ipv6_mask').val(),
+   				'start_ipv6': $('#sanitize-start_ipv6').val(),
+   				'mac_mask': $('#sanitize-mac_mask').val(),
+   				'start_mac': $('#sanitize-start_mac').val(),
+   	   			};
+
+	   		$.ajax({
+	   			type : "POST",
+	   			url : "/captures/{{ traceFile.id }}/sanitize",
+	   			data : JSON.stringify(data),
+	   			dataType : "json",
+	   			contentType: 'application/json;charset=UTF-8',
+	   			complete : function(){
+	   				$('#sanitizeModal').modal('hide');
+	   			}
+	   		});
+
+	   	});
+
+	   	window.setTimeout(function() { $(".alert").alert('close'); }, 5000);
+
+	});
+</script>
+{% endblock %}
