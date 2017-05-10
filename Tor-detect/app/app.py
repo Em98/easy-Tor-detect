@@ -1,6 +1,6 @@
-import os, datetime, time, random, json, uuid, chartkick, base64, hashlib
+import os, datetime, time, random, json, uuid, chartkick, base64, hashlib, subprocess, shutil
 from os.path import splitext
-from flask import redirect, render_template, url_for, flash, request, Flask, send_file, jsonify
+from flask import redirect, render_template, url_for, flash, request, Flask, send_file, jsonify, session
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError, ProgrammingError
@@ -15,6 +15,7 @@ from sanicap import sanitize
 from forms import LoginForm, EditTags, ProfileForm, AddUser, EditUser, TempPasswordForm, SanitizeForm
 from flask.ext.migrate import Migrate, MigrateCommand
 from pcap_helper import get_capture_count, decode_capture_file_summary, get_packet_detail
+import getFingerPrint
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -28,6 +29,7 @@ app.jinja_env.add_extension("chartkick.ext.charts")
 app.config.from_object(os.environ['APP_SETTINGS'])
 ALLOWED_EXTENSIONS = ['pcap','pcapng','cap']
 UPLOAD_FOLDER = os.path.join(basedir, 'static/tracefiles/')
+CATCH_FOLDER = os.path.join(basedir, 'static/capturefiles/')
 
 def format_comma(value):
     return "{:,.0f}".format(value)
@@ -139,6 +141,7 @@ def login():
         user = User.query.filter_by(username=form.username.data.lower()).first()
         if user is not None and user.verify_password(form.password.data):
             login_user(user)
+            session["user_token"] = user.token
         else:
             flash('Invalid username or password.', 'danger')
             return redirect(request.args.get('next') or url_for('login'))
@@ -171,6 +174,118 @@ def getNetCartList():
             continue
     return targetList
 
+@app.route('/capture', methods=['POST'])
+def capture():
+    try:
+        token = session['user_token']
+        user = User.query.filter_by(token = token).one()
+    except NoResultFound:
+        return  '404'
+
+    netCard = request.form['netCard']
+    catchTime = request.form['catchTime']
+    pcapName = request.form['pcapName']+'.pcap'
+    if not catchTime:
+        return "406"
+
+    cmd = 'tshark -i '+netCard+' -a duration:'+catchTime+' -w '+os.path.join(CATCH_FOLDER, pcapName)
+    subprocess.call(cmd, shell=True)
+    print cmd
+    # return '#'.join([netCard, catchTime, pcapName])
+    with open(os.path.join(CATCH_FOLDER, pcapName), 'r') as traceFile:
+        # traceFile = request.files['file']
+        # filename = traceFile.filename
+        # filetype = splitext(filename)[1].strip('.')
+        (filename, filetype) = tuple(traceFile.name.split('.'))
+        print filename
+        uuid_filename = '.'.join([str(uuid.uuid4()), filetype])
+        # traceFile.save(os.path.join(UPLOAD_FOLDER, uuid_filename))
+        try:
+            shutil.copyfile(os.path.join(CATCH_FOLDER, pcapName), 
+            os.path.join(UPLOAD_FOLDER, uuid_filename))
+        except:
+            print 'copy fail'
+            return '407'
+
+    if allowed_file(pcapName):
+        new_file = TraceFile(id=str(uuid.uuid4())[:8],
+            name=secure_filename(splitext(pcapName)[0]),
+            user_id = user.id,
+            filename = uuid_filename,
+            filetype = filetype,
+            filesize = os.path.getsize(os.path.join(UPLOAD_FOLDER, uuid_filename)),
+            packet_count = get_capture_count(uuid_filename),
+            date_added = datetime.datetime.now()
+            )
+
+        db.session.add(new_file)
+        db.session.commit()
+        db.session.refresh(new_file)
+
+        #add tags
+        # if request.form.getlist('additional_tags'):
+        #     for tag in request.form.getlist('additional_tags')[0].split(','):
+        #         if tag.strip(',') != '':
+        #             new_tag = Tag(name = tag.strip(','), file_id=new_file.id)
+        #             db.session.add(new_tag)
+
+        db.session.commit()
+        log('info','File capture by : %s.' % (filename))
+        print 'finish'
+    else:
+        os.remove(os.path.join(UPLOAD_FOLDER, uuid_filename))
+        return '409'
+
+    return '203'
+
+@app.route('/detect', methods=['POST'])
+def detect():
+    file_id = request.form['file_id']
+    file_name = request.form['file_name']
+    oriFile = TraceFile.query.filter_by(id = file_id).one()
+    name = oriFile.name
+    uuName = oriFile.filename
+    afterName = getFingerPrint.isTorExists(name, uuName)
+    print afterName
+    try:
+        token = session['user_token']
+        user = User.query.filter_by(token = token).one()
+    except NoResultFound:
+        return  '404'
+    
+    with open(os.path.join(CATCH_FOLDER, afterName), 'r') as traceFile:
+        (filename, filetype) = tuple(traceFile.name.split('.'))
+        uuid_filename = '.'.join([str(uuid.uuid4()), filetype])
+        try:
+            shutil.copyfile(os.path.join(CATCH_FOLDER, afterName), os.path.join(UPLOAD_FOLDER, uuid_filename))
+        except:
+            print 'copy fail'
+            return '407'
+
+    if allowed_file(afterName):
+        new_file = TraceFile(id=str(uuid.uuid4())[:8],
+            name=secure_filename(splitext(afterName)[0]),
+            user_id = user.id,
+            filename = uuid_filename,
+            filetype = filetype,
+            filesize = os.path.getsize(os.path.join(UPLOAD_FOLDER, uuid_filename)),
+            packet_count = get_capture_count(uuid_filename),
+            date_added = datetime.datetime.now()
+            )
+
+        db.session.add(new_file)
+        db.session.commit()
+        db.session.refresh(new_file)
+        db.session.commit()
+        log('info','File capture by : %s.' % (filename))
+        print 'finish'
+    else:
+        os.remove(os.path.join(UPLOAD_FOLDER, uuid_filename))
+        return '409'
+
+    return '204'
+
+
 @app.route('/', methods=['GET','POST']) 
 @login_required
 def home():
@@ -178,7 +293,7 @@ def home():
         netCardList = getNetCartList()
     except:
         netCardList = ['error to get NetWork Card List']
-    print netCardList
+    # print netCardList
     form = TempPasswordForm()
 
     if form.validate_on_submit():
@@ -193,7 +308,6 @@ def home():
 
         user.temp_password = False
         db.session.commit()
-
 
         flash('Password has been changed.', 'success')
         return redirect(url_for('home'))

@@ -114,7 +114,7 @@ def get_packet_detail(traceFile, number):
 						    <div class="panel-body">
 
 			''' % {'name': line[:-1], 'link': line.replace(' ', '-').strip(':')}
-		elif 'Layer' in line:
+		elif 'Layer' in line and 'TLS' not in line:
 			detail += '''</div>
 						  </div>
 						</div>
@@ -131,6 +131,7 @@ def get_packet_detail(traceFile, number):
 						    <div class="panel-body">
 
 			''' % {'name': line[:-1], 'link': line.replace(' ', '-').strip(':')}
+
 		else:	
 			keyword = line.split(': ')[0] + ': '
 

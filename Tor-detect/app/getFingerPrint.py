@@ -4,6 +4,8 @@ import pyshark
 import re
 import fingerPrint
 import subprocess
+import os
+from app import UPLOAD_FOLDER, CATCH_FOLDER
 
 def getFingerPrint(layerList):
     fingerPrintDict = {}
@@ -40,8 +42,10 @@ def getFingerPrint(layerList):
     return fingerPrint.FingerPrint(cipherSuite, validity, caList)
 
 
-def isTorExists(pcapPath)
+def isTorExists(name, uuName):
     # pcapPath = '/home/yc/capdata/capdata8.pcap'
+    pcapPath = os.path.join(UPLOAD_FOLDER, uuName)
+    outputFileName = ''
     cap = pyshark.FileCapture(pcapPath, display_filter= 'ssl')
     layerList = []
     TorIPList = []
@@ -79,9 +83,12 @@ def isTorExists(pcapPath)
         if len(TorIPList) > 1:
             for ip in TorIPList[1:]:
                 display += ' or ip.src=='+ip+' or ip.dst=='+ip
-        outputFileName = '/home/yc/capdata/Torout.pcap'
+        afterName = name+'_after_Tor.'+uuName.split('.')[-1]
+        outputFileName = os.path.join(CATCH_FOLDER, afterName)
         command = 'tshark -r '+pcapPath+' -Y \"'+display+'\" -w '+outputFileName
         print command
         subprocess.Popen(command, shell=True)
         find = False
+    
+    return afterName
 
