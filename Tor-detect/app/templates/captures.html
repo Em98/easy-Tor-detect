@@ -127,7 +127,8 @@ Captures - {{ traceFile.name }}
 			      		{% column_chart details['stats']['breakdown'] with library=library.col_library %}
 			      	</div>
 			      	<div class="col-md-4">
-			      		{% pie_chart details['stats']['length_buckets'] with library=library.pie_library %}
+			      		<!--  {% pie_chart details['stats']['length_buckets'] with library=library.pie_library %}-->
+						{% pie_chart prot_percent with library=library.pie_library %}  
 			      	</div>
 			      	<div class="col-md-4">
 			      		<h4 class="chart-title text-center">Capture File Stats</h4>

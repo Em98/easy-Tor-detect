@@ -34,7 +34,7 @@ def decode_capture_file_summary(traceFile, display_filter=None):
 		'packets': [],
 		# 'linechart': []
 		}
-	
+	prot_buckets = {}
 	avg_length = []
 	
 	def decode_packet(packet):
@@ -49,6 +49,11 @@ def decode_capture_file_summary(traceFile, display_filter=None):
 		pkt_details['protocol'] = packet.protocol
 		pkt_details['desc'] = packet.info
 		
+		if packet.protocol in prot_buckets.keys():
+		  prot_buckets[packet.protocol] += 1
+		else:
+			prot_buckets[packet.protocol] = 1
+
 		# delta and stream aren't supported by earlier versions (1.99.1) of tshark
 		try:
 			pkt_details['delta'] = packet.delta
@@ -82,7 +87,7 @@ def decode_capture_file_summary(traceFile, display_filter=None):
 
 	details['stats']['avg_length'] = sum(avg_length) / len(avg_length)
 
-	return len(cap), details
+	return len(cap), details, prot_buckets
 
 
 def get_packet_detail(traceFile, number):

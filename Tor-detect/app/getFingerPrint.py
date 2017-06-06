@@ -43,7 +43,6 @@ def getFingerPrint(layerList):
 
 
 def isTorExists(name, uuName):
-    # pcapPath = '/home/yc/capdata/capdata8.pcap'
     pcapPath = os.path.join(UPLOAD_FOLDER, uuName)
     outputFileName = ''
     cap = pyshark.FileCapture(pcapPath, display_filter= 'ssl')
@@ -60,10 +59,7 @@ def isTorExists(name, uuName):
                 newFingerPrint = getFingerPrint(layerList)
                 layerList = []
                 if newFingerPrint.isTorFingerPrint():
-                    # print "yes"
                     find = True
-                # else:
-                #     print "no"
             elif '2' in hsList and '11' not in hsList:
                 layerList.append(sslLayer)
                 continue
@@ -74,8 +70,6 @@ def isTorExists(name, uuName):
                 if newFingerPrint.isTorFingerPrint():
                     print 'yes'
                     find = True
-                # else:
-                #     print 'no'
     if find:
         TorIP = pkt.ip.src
         TorIPList.append(TorIP)
@@ -86,9 +80,7 @@ def isTorExists(name, uuName):
         afterName = name+'_after_Tor.'+uuName.split('.')[-1]
         outputFileName = os.path.join(CATCH_FOLDER, afterName)
         command = 'tshark -r '+pcapPath+' -Y \"'+display+'\" -w '+outputFileName
-        print command
         subprocess.Popen(command, shell=True)
         find = False
-    
     return afterName
 

@@ -1,3 +1,4 @@
+from __future__ import division
 import os, datetime, time, random, json, uuid, chartkick, base64, hashlib, subprocess, shutil
 from os.path import splitext
 from flask import redirect, render_template, url_for, flash, request, Flask, send_file, jsonify, session
@@ -15,6 +16,7 @@ from sanicap import sanitize
 from forms import LoginForm, EditTags, ProfileForm, AddUser, EditUser, TempPasswordForm, SanitizeForm
 from flask.ext.migrate import Migrate, MigrateCommand
 from pcap_helper import get_capture_count, decode_capture_file_summary, get_packet_detail
+
 import getFingerPrint
 
 
@@ -181,30 +183,20 @@ def capture():
         user = User.query.filter_by(token = token).one()
     except NoResultFound:
         return  '404'
-
     netCard = request.form['netCard']
     catchTime = request.form['catchTime']
     pcapName = request.form['pcapName']+'.pcap'
     if not catchTime:
         return "406"
-
     cmd = 'tshark -i '+netCard+' -a duration:'+catchTime+' -w '+os.path.join(CATCH_FOLDER, pcapName)
     subprocess.call(cmd, shell=True)
-    print cmd
-    # return '#'.join([netCard, catchTime, pcapName])
     with open(os.path.join(CATCH_FOLDER, pcapName), 'r') as traceFile:
-        # traceFile = request.files['file']
-        # filename = traceFile.filename
-        # filetype = splitext(filename)[1].strip('.')
         (filename, filetype) = tuple(traceFile.name.split('.'))
-        print filename
         uuid_filename = '.'.join([str(uuid.uuid4()), filetype])
-        # traceFile.save(os.path.join(UPLOAD_FOLDER, uuid_filename))
         try:
             shutil.copyfile(os.path.join(CATCH_FOLDER, pcapName), 
             os.path.join(UPLOAD_FOLDER, uuid_filename))
         except:
-            print 'copy fail'
             return '407'
 
     if allowed_file(pcapName):
@@ -231,7 +223,6 @@ def capture():
 
         db.session.commit()
         log('info','File capture by : %s.' % (filename))
-        print 'finish'
     else:
         os.remove(os.path.join(UPLOAD_FOLDER, uuid_filename))
         return '409'
@@ -345,15 +336,19 @@ def captures(file_id):
     except NoResultFound:
         tagsForm.tags.data = ''
 
-    display_count, details = decode_capture_file_summary(traceFile, display_filter)
+    display_count, details, prot_buckets = decode_capture_file_summary(traceFile, display_filter)
 
     if isinstance(details, basestring):
         flash(details, 'warning')
         return render_template('captures.html', traceFile=traceFile, tagsForm=tagsForm, sanitizeForm=sanitizeForm, display_count=display_count)
     
     tags = set([x.name for x in Tag.query.all()])
-
-    return render_template('captures.html', traceFile=traceFile, tagsForm=tagsForm, sanitizeForm=sanitizeForm, display_count=display_count, details=details, tags=tags)
+    prot_percent = {}
+    for (k, v) in prot_buckets.items():
+        pv = float("%.2f"%(100*v/display_count))
+       # prot_percent[k] = 100*v/display_count
+        prot_percent[k] = pv
+    return render_template('captures.html', traceFile=traceFile, tagsForm=tagsForm, sanitizeForm=sanitizeForm, display_count=display_count, details=details, tags=tags, prot_percent = prot_percent)
 
 
 @app.route('/captures/<file_id>/packetDetail/<int:number>')
