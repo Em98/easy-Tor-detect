@@ -45,6 +45,7 @@ def getFingerPrint(layerList):
 def isTorExists(name, uuName):
     pcapPath = os.path.join(UPLOAD_FOLDER, uuName)
     outputFileName = ''
+    afterName = 'not found'
     cap = pyshark.FileCapture(pcapPath, display_filter= 'ssl')
     layerList = []
     TorIPList = []

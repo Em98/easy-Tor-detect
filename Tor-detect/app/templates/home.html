@@ -244,6 +244,7 @@ var se =document.getElementById("sel");
 
 	$(document).ready(function(){
 		$("#catchBtn").click(function(){
+			alert("正在抓包，请等待至窗口自动刷新")
 			$.post('/capture',
 			{
 				netCard : netCardSelelct,
@@ -299,7 +300,7 @@ var se =document.getElementById("sel");
 							parent.location.replace(parent.location.href);
 						}
 						else{
-							alert(status);
+							alert("There is no Tor TLS certificate");
 						}
 					}
 				)
